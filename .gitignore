@@ -1,0 +1,12 @@
+*.exe
+*.out
+/bin/
+/cbar-rates
+*.test
+coverage.*
+.vscode/
+.idea/
+.DS_Store
+.env
+.claude
+.history
