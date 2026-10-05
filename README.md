@@ -3,6 +3,8 @@
 A small Go microservice that fetches the official daily exchange rates from the
 Central Bank of Azerbaijan (CBAR), caches them, and serves them as a JSON API.
 
+**Live demo:** [rates.saidmuradkhan.dev](https://rates.saidmuradkhan.dev) · [USD rate](https://rates.saidmuradkhan.dev/rates/USD) *(private preview, login required for now)*
+
 > Part of a 3-service system: [az-job-radar](https://github.com/saidmuradkhan/az-job-radar) (Python) · **cbar-rates** (Go) · [jobtrack](https://github.com/saidmuradkhan/jobtrack) (Django + React)
 
 ## API
