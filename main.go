@@ -8,6 +8,7 @@ import (
 
 	"github.com/saidmuradkhan/cbar-rates/internal/api"
 	"github.com/saidmuradkhan/cbar-rates/internal/cbar"
+	"github.com/saidmuradkhan/cbar-rates/internal/gate"
 )
 
 func main() {
@@ -17,7 +18,7 @@ func main() {
 	}
 
 	cache := api.NewCache(cbar.NewClient(), time.Hour)
-	srv := api.NewServer(cache)
+	srv := gate.FromEnv().Wrap(api.NewServer(cache))
 
 	log.Printf("listening on :%s", port)
 	log.Fatal(http.ListenAndServe(":"+port, srv))
