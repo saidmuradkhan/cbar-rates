@@ -33,6 +33,13 @@ func TestHealth(t *testing.T) {
 	}
 }
 
+func TestIndexListsEndpoints(t *testing.T) {
+	code, body := get(t, newTestServer(t), "/")
+	if code != http.StatusOK || body["service"] != "cbar-rates" {
+		t.Errorf("got %d %v", code, body)
+	}
+}
+
 func TestListRates(t *testing.T) {
 	code, body := get(t, newTestServer(t), "/rates")
 	if code != http.StatusOK {

@@ -19,6 +19,7 @@ type Server struct {
 
 func NewServer(cache *Cache) *Server {
 	s := &Server{mux: http.NewServeMux(), cache: cache}
+	s.mux.HandleFunc("GET /{$}", s.index)
 	s.mux.HandleFunc("GET /health", s.health)
 	s.mux.HandleFunc("GET /rates", s.listRates)
 	s.mux.HandleFunc("GET /rates/{code}", s.getRate)
@@ -46,6 +47,18 @@ func toRateJSON(r cbar.Rate) rateJSON {
 		Value:   r.Value,
 		PerUnit: round(r.PerUnit(), 6),
 	}
+}
+
+func (s *Server) index(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"service": "cbar-rates",
+		"endpoints": []string{
+			"/health",
+			"/rates",
+			"/rates/{code}",
+			"/convert?from=USD&to=AZN&amount=100",
+		},
+	})
 }
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
