@@ -3,7 +3,7 @@ package api
 import (
 	_ "embed"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"math"
 	"net/http"
 	"sort"
@@ -167,7 +167,7 @@ func perUnitAZN(rates *cbar.Rates, code string) (float64, bool) {
 func (s *Server) todayRates(w http.ResponseWriter, r *http.Request) (*cbar.Rates, bool) {
 	rates, err := s.cache.Today(r.Context())
 	if err != nil {
-		log.Printf("fetch rates: %v", err)
+		slog.Error("fetch rates failed", "err", err)
 		writeError(w, http.StatusBadGateway, "rates are unavailable right now")
 		return nil, false
 	}

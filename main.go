@@ -1,7 +1,7 @@
 package main
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
@@ -12,6 +12,8 @@ import (
 )
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
@@ -20,6 +22,9 @@ func main() {
 	cache := api.NewCache(cbar.NewClient(), time.Hour)
 	srv := gate.FromEnv().Wrap(api.NewServer(cache))
 
-	log.Printf("listening on :%s", port)
-	log.Fatal(http.ListenAndServe(":"+port, srv))
+	slog.Info("server starting", "port", port)
+	if err := http.ListenAndServe(":"+port, srv); err != nil {
+		slog.Error("server stopped", "err", err)
+		os.Exit(1)
+	}
 }
