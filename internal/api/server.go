@@ -1,6 +1,7 @@
 package api
 
 import (
+	_ "embed"
 	"encoding/json"
 	"log"
 	"math"
@@ -12,6 +13,9 @@ import (
 	"github.com/saidmuradkhan/cbar-rates/internal/cbar"
 )
 
+//go:embed page.html
+var converterPage []byte
+
 type Server struct {
 	mux   *http.ServeMux
 	cache *Cache
@@ -19,7 +23,8 @@ type Server struct {
 
 func NewServer(cache *Cache) *Server {
 	s := &Server{mux: http.NewServeMux(), cache: cache}
-	s.mux.HandleFunc("GET /{$}", s.index)
+	s.mux.HandleFunc("GET /{$}", s.page)
+	s.mux.HandleFunc("GET /api", s.index)
 	s.mux.HandleFunc("GET /health", s.health)
 	s.mux.HandleFunc("GET /rates", s.listRates)
 	s.mux.HandleFunc("GET /rates/{code}", s.getRate)
@@ -49,10 +54,16 @@ func toRateJSON(r cbar.Rate) rateJSON {
 	}
 }
 
+func (s *Server) page(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write(converterPage)
+}
+
 func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"service": "cbar-rates",
 		"endpoints": []string{
+			"/",
 			"/health",
 			"/rates",
 			"/rates/{code}",

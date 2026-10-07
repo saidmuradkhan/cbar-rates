@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -34,9 +35,24 @@ func TestHealth(t *testing.T) {
 }
 
 func TestIndexListsEndpoints(t *testing.T) {
-	code, body := get(t, newTestServer(t), "/")
+	code, body := get(t, newTestServer(t), "/api")
 	if code != http.StatusOK || body["service"] != "cbar-rates" {
 		t.Errorf("got %d %v", code, body)
+	}
+}
+
+func TestConverterPage(t *testing.T) {
+	rec := httptest.NewRecorder()
+	newTestServer(t).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	if got := rec.Header().Get("Content-Type"); !strings.HasPrefix(got, "text/html") {
+		t.Errorf("Content-Type = %q", got)
+	}
+	if !strings.Contains(rec.Body.String(), `id="converter"`) {
+		t.Error("page does not contain the converter form")
 	}
 }
 
