@@ -20,7 +20,7 @@ func main() {
 	}
 
 	cache := api.NewCache(cbar.NewClient(), time.Hour)
-	srv := gate.FromEnv().Wrap(api.NewServer(cache))
+	srv := api.LogRequests(slog.Default(), gate.FromEnv().Wrap(api.NewServer(cache)))
 
 	slog.Info("server starting", "port", port)
 	if err := http.ListenAndServe(":"+port, srv); err != nil {
