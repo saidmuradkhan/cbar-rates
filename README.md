@@ -1,7 +1,10 @@
 # cbar-rates
 
+![CI](https://github.com/saidmuradkhan/cbar-rates/actions/workflows/ci.yml/badge.svg)
+
 A small Go microservice that fetches the official daily exchange rates from the
-Central Bank of Azerbaijan (CBAR), caches them, and serves them as a JSON API.
+Central Bank of Azerbaijan (CBAR), caches them, and serves them as a JSON API
+plus a small converter page.
 
 **Live demo:** [rates.saidmuradkhan.dev](https://rates.saidmuradkhan.dev) · [USD rate](https://rates.saidmuradkhan.dev/rates/USD) *(private preview, login required for now)*
 
@@ -11,6 +14,8 @@ Central Bank of Azerbaijan (CBAR), caches them, and serves them as a JSON API.
 
 | Method | Path | Description |
 |---|---|---|
+| GET | `/` | Converter page (HTML, works on mobile) |
+| GET | `/api` | List of endpoints (JSON) |
 | GET | `/health` | Liveness check |
 | GET | `/rates` | All rates for today |
 | GET | `/rates/{code}` | One currency, e.g. `/rates/USD` |
@@ -31,6 +36,12 @@ go run .                # http://localhost:8080 (set PORT to change)
 go test ./...
 ```
 
+Logs are JSON lines (`log/slog`), one per request:
+
+```
+{"time":"...","level":"INFO","msg":"request","method":"GET","path":"/rates/USD","status":200,"duration_ms":0}
+```
+
 ## Deployment
 
 Runs on Vercel with the Go framework preset (`vercel.json`), straight from `main.go`.
@@ -47,7 +58,7 @@ environment variables:
 
 ## Tech stack
 
-Go (standard library `net/http`, `encoding/xml`) · Docker · GitHub Actions
+Go (standard library `net/http`, `encoding/xml`, `log/slog`, `embed`) · GitHub Actions · Vercel
 
 ## Roadmap
 
@@ -58,9 +69,12 @@ Go (standard library `net/http`, `encoding/xml`) · Docker · GitHub Actions
 - [x] `/convert` endpoint
 - [x] Unit tests with `testing` + `httptest`
 - [x] Preview deployment on Vercel behind a login page
-- [ ] Graceful shutdown, structured logging (`log/slog`)
+- [x] Converter page at `/`
+- [x] Structured logging (`log/slog`), one line per request
+- [x] CI: `gofmt`, `go vet`, `go test -race`
+- [ ] Historical rates (`/rates?date=`) and a 30-day chart
+- [ ] Graceful shutdown, rate limiting
 - [ ] Dockerfile (multi-stage build)
-- [ ] CI: `go vet`, `go test`
 
 ## License
 
