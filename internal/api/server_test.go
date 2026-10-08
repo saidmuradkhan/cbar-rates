@@ -55,8 +55,10 @@ func TestConverterPage(t *testing.T) {
 	if got := rec.Header().Get("Content-Type"); !strings.HasPrefix(got, "text/html") {
 		t.Errorf("Content-Type = %q", got)
 	}
-	if !strings.Contains(rec.Body.String(), `id="converter"`) {
-		t.Error("page does not contain the converter form")
+	for _, id := range []string{`id="converter"`, `id="chart"`} {
+		if !strings.Contains(rec.Body.String(), id) {
+			t.Errorf("page does not contain %s", id)
+		}
 	}
 }
 
