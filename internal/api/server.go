@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/saidmuradkhan/cbar-rates/internal/cbar"
 )
@@ -65,7 +66,7 @@ func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 		"endpoints": []string{
 			"/",
 			"/health",
-			"/rates",
+			"/rates?date=2026-10-01",
 			"/rates/{code}",
 			"/convert?from=USD&to=AZN&amount=100",
 		},
@@ -77,7 +78,7 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listRates(w http.ResponseWriter, r *http.Request) {
-	rates, ok := s.todayRates(w, r)
+	rates, ok := s.requestedRates(w, r)
 	if !ok {
 		return
 	}
@@ -96,7 +97,7 @@ func (s *Server) listRates(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getRate(w http.ResponseWriter, r *http.Request) {
-	rates, ok := s.todayRates(w, r)
+	rates, ok := s.requestedRates(w, r)
 	if !ok {
 		return
 	}
@@ -129,7 +130,7 @@ func (s *Server) convert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rates, ok := s.todayRates(w, r)
+	rates, ok := s.requestedRates(w, r)
 	if !ok {
 		return
 	}
@@ -164,8 +165,22 @@ func perUnitAZN(rates *cbar.Rates, code string) (float64, bool) {
 	return rate.PerUnit(), found
 }
 
-func (s *Server) todayRates(w http.ResponseWriter, r *http.Request) (*cbar.Rates, bool) {
-	rates, err := s.cache.Today(r.Context())
+func (s *Server) requestedRates(w http.ResponseWriter, r *http.Request) (*cbar.Rates, bool) {
+	date := s.cache.now()
+	if v := r.URL.Query().Get("date"); v != "" {
+		d, err := time.ParseInLocation("2006-01-02", v, cbar.Baku)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "date must look like 2026-10-01")
+			return nil, false
+		}
+		if d.After(date) {
+			writeError(w, http.StatusBadRequest, "date cannot be in the future")
+			return nil, false
+		}
+		date = d
+	}
+
+	rates, err := s.cache.Get(r.Context(), date)
 	if err != nil {
 		slog.Error("fetch rates failed", "err", err)
 		writeError(w, http.StatusBadGateway, "rates are unavailable right now")

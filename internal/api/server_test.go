@@ -1,13 +1,17 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/saidmuradkhan/cbar-rates/internal/cbar"
 )
 
 func newTestServer(t *testing.T) *Server {
@@ -149,5 +153,62 @@ func TestRatesUnavailable(t *testing.T) {
 	code, body := get(t, srv, "/rates")
 	if code != http.StatusBadGateway || body["error"] == nil {
 		t.Errorf("got %d %v, want 502 with error", code, body)
+	}
+}
+
+type datedFetcher struct {
+	base *cbar.Rates
+
+	mu        sync.Mutex
+	requested []string
+}
+
+func (f *datedFetcher) Fetch(ctx context.Context, date time.Time) (*cbar.Rates, error) {
+	f.mu.Lock()
+	f.requested = append(f.requested, date.Format("2006-01-02"))
+	f.mu.Unlock()
+	return &cbar.Rates{Date: date, Rates: f.base.Rates}, nil
+}
+
+func newDatedServer(t *testing.T) (*Server, *datedFetcher) {
+	t.Helper()
+	f := &datedFetcher{base: fixtureRates(t)}
+	clock := time.Date(2026, 10, 8, 12, 0, 0, 0, cbar.Baku)
+	return NewServer(newTestCache(f, &clock)), f
+}
+
+func TestRatesForDate(t *testing.T) {
+	srv, f := newDatedServer(t)
+
+	code, body := get(t, srv, "/rates/USD?date=2026-09-15")
+	if code != http.StatusOK || body["date"] != "2026-09-15" {
+		t.Errorf("got %d %v", code, body)
+	}
+	code, body = get(t, srv, "/convert?from=USD&to=AZN&amount=10&date=2026-10-01")
+	if code != http.StatusOK || body["date"] != "2026-10-01" {
+		t.Errorf("got %d %v", code, body)
+	}
+	code, body = get(t, srv, "/rates")
+	if code != http.StatusOK || body["date"] != "2026-10-08" {
+		t.Errorf("without a date: got %d %v", code, body["date"])
+	}
+	if len(f.requested) != 3 {
+		t.Errorf("requested %v", f.requested)
+	}
+}
+
+func TestRatesForBadDate(t *testing.T) {
+	srv, _ := newDatedServer(t)
+
+	for _, url := range []string{
+		"/rates?date=15.09.2026",
+		"/rates?date=2026-13-01",
+		"/rates?date=2026-10-09",
+		"/convert?from=USD&to=AZN&amount=1&date=yesterday",
+	} {
+		code, body := get(t, srv, url)
+		if code != http.StatusBadRequest || body["error"] == nil {
+			t.Errorf("%s: got %d %v, want 400 with error", url, code, body)
+		}
 	}
 }
