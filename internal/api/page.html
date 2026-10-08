@@ -38,6 +38,20 @@
   td, th { padding: 6px 0; text-align: left; border-bottom: 1px solid var(--border); }
   td:last-child, th:last-child { text-align: right; }
   tr:last-child td { border-bottom: none; }
+  .chart-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  h2 { margin: 0; font-size: 1rem; }
+  .chart-wrap { position: relative; margin-top: 12px; }
+  #chart { display: block; width: 100%; height: 200px; touch-action: pan-y; }
+  #chart text { fill: var(--muted); font-size: 12px; }
+  #chart .grid { stroke: var(--border); stroke-width: 1; }
+  #chart .line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; }
+  #chart .area { fill: var(--accent); opacity: .12; }
+  #chart .cursor { stroke: var(--muted); stroke-width: 1; }
+  #chart .dot { fill: var(--accent); stroke: var(--surface); stroke-width: 2; }
+  .tip {
+    position: absolute; top: 0; transform: translateX(-50%); pointer-events: none; white-space: nowrap;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 2px 8px; font-size: .85rem;
+  }
 </style>
 </head>
 <body>
@@ -58,6 +72,17 @@
     </form>
     <div class="result" id="result">…</div>
     <div class="muted" id="details"></div>
+  </section>
+
+  <section class="card" id="chart-card" hidden>
+    <div class="chart-head">
+      <h2 id="chart-title"></h2>
+      <span class="muted" id="chart-change"></span>
+    </div>
+    <div class="chart-wrap">
+      <svg id="chart" role="img"></svg>
+      <div class="tip" id="tip" hidden></div>
+    </div>
   </section>
 
   <section class="card">
@@ -123,6 +148,124 @@
     }
   }
 
+  const SVG = "http://www.w3.org/2000/svg";
+  const HEIGHT = 200;
+  const PAD = { top: 28, right: 12, bottom: 24, left: 52 };
+  let chartPoints = [];
+
+  function svgEl(name, attrs) {
+    const el = document.createElementNS(SVG, name);
+    for (const [key, value] of Object.entries(attrs)) el.setAttribute(key, value);
+    return el;
+  }
+
+  function formatRate(value) {
+    return String(Number(value.toPrecision(5)));
+  }
+
+  async function perUnitByDate(code) {
+    if (code === "AZN") return null;
+    const data = await getJSON(`/history/${code}?days=30`);
+    return new Map(data.points.map((p) => [p.date, p.per_unit]));
+  }
+
+  async function loadChart() {
+    const from = $("from").value;
+    const to = $("to").value;
+    if (from === to) {
+      $("chart-card").hidden = true;
+      return;
+    }
+    try {
+      const [fromAZN, toAZN] = await Promise.all([perUnitByDate(from), perUnitByDate(to)]);
+      const dates = [...(fromAZN || toAZN).keys()];
+      const points = dates
+        .map((date) => ({
+          date,
+          value: (fromAZN ? fromAZN.get(date) : 1) / (toAZN ? toAZN.get(date) : 1),
+        }))
+        .filter((p) => Number.isFinite(p.value));
+      if (from !== $("from").value || to !== $("to").value) return;
+      chartPoints = points;
+
+      $("chart-title").textContent = `1 ${from} in ${to}, last 30 days`;
+      const first = chartPoints[0].value;
+      const last = chartPoints[chartPoints.length - 1].value;
+      const change = ((last - first) / first) * 100;
+      $("chart-change").textContent = `${change >= 0 ? "+" : ""}${change.toFixed(2)}%`;
+      $("chart-card").hidden = false;
+      drawChart();
+    } catch (error) {
+      $("chart-card").hidden = true;
+    }
+  }
+
+  function drawChart() {
+    const svg = $("chart");
+    const width = svg.clientWidth;
+    if (!width || chartPoints.length === 0) return;
+    svg.setAttribute("viewBox", `0 0 ${width} ${HEIGHT}`);
+    svg.replaceChildren();
+
+    const values = chartPoints.map((p) => p.value);
+    let min = Math.min(...values);
+    let max = Math.max(...values);
+    if (max - min < max * 0.002) {
+      min -= max * 0.005;
+      max += max * 0.005;
+    }
+    const x = (i) => PAD.left + (i / Math.max(chartPoints.length - 1, 1)) * (width - PAD.left - PAD.right);
+    const y = (v) => PAD.top + ((max - v) / (max - min)) * (HEIGHT - PAD.top - PAD.bottom);
+
+    for (const v of [min, (min + max) / 2, max]) {
+      svg.append(svgEl("line", { class: "grid", x1: PAD.left, x2: width - PAD.right, y1: y(v), y2: y(v) }));
+      const label = svgEl("text", { x: PAD.left - 8, y: y(v) + 4, "text-anchor": "end" });
+      label.textContent = formatRate(v);
+      svg.append(label);
+    }
+
+    const first = chartPoints[0];
+    const last = chartPoints[chartPoints.length - 1];
+    for (const [point, i, anchor] of [[first, 0, "start"], [last, chartPoints.length - 1, "end"]]) {
+      const label = svgEl("text", { x: x(i), y: HEIGHT - 6, "text-anchor": anchor });
+      label.textContent = point.date.slice(5);
+      svg.append(label);
+    }
+
+    const line = chartPoints.map((p, i) => `${x(i)},${y(p.value)}`).join(" ");
+    const bottom = HEIGHT - PAD.bottom;
+    svg.append(svgEl("polygon", {
+      class: "area",
+      points: `${x(0)},${bottom} ${line} ${x(chartPoints.length - 1)},${bottom}`,
+    }));
+    svg.append(svgEl("polyline", { class: "line", points: line }));
+
+    const cursor = svgEl("line", { class: "cursor", y1: PAD.top, y2: bottom, visibility: "hidden" });
+    const dot = svgEl("circle", { class: "dot", r: 5, visibility: "hidden" });
+    svg.append(cursor, dot);
+    svg.setAttribute("aria-label",
+      `${$("chart-title").textContent}: from ${formatRate(first.value)} on ${first.date} to ${formatRate(last.value)} on ${last.date}`);
+
+    svg.onpointermove = (event) => {
+      const box = svg.getBoundingClientRect();
+      const step = (width - PAD.left - PAD.right) / Math.max(chartPoints.length - 1, 1);
+      const i = Math.min(chartPoints.length - 1, Math.max(0, Math.round((event.clientX - box.left - PAD.left) / step)));
+      const point = chartPoints[i];
+      for (const el of [cursor, dot]) el.setAttribute("visibility", "visible");
+      cursor.setAttribute("x1", x(i));
+      cursor.setAttribute("x2", x(i));
+      dot.setAttribute("cx", x(i));
+      dot.setAttribute("cy", y(point.value));
+      $("tip").hidden = false;
+      $("tip").style.left = `${Math.min(Math.max(x(i), 60), width - 60)}px`;
+      $("tip").textContent = `${point.date} · ${formatRate(point.value)} ${$("to").value}`;
+    };
+    svg.onpointerleave = () => {
+      for (const el of [cursor, dot]) el.setAttribute("visibility", "hidden");
+      $("tip").hidden = true;
+    };
+  }
+
   async function start() {
     try {
       const data = await getJSON("/rates");
@@ -131,6 +274,7 @@
       fillSelect($("to"), codes, "AZN");
       showPopular(data.rates, data.date);
       convert();
+      loadChart();
     } catch (error) {
       $("result").classList.add("error");
       $("result").textContent = error.message;
@@ -139,10 +283,14 @@
 
   $("converter").addEventListener("input", scheduleConvert);
   $("converter").addEventListener("submit", (event) => event.preventDefault());
+  $("from").addEventListener("change", loadChart);
+  $("to").addEventListener("change", loadChart);
   $("swap").addEventListener("click", () => {
     [$("from").value, $("to").value] = [$("to").value, $("from").value];
     convert();
+    loadChart();
   });
+  window.addEventListener("resize", drawChart);
   start();
 </script>
 </body>
