@@ -30,6 +30,7 @@ func NewServer(cache *Cache) *Server {
 	s.mux.HandleFunc("GET /rates", s.listRates)
 	s.mux.HandleFunc("GET /rates/{code}", s.getRate)
 	s.mux.HandleFunc("GET /convert", s.convert)
+	s.mux.HandleFunc("GET /history/{code}", s.history)
 	return s
 }
 
@@ -69,6 +70,7 @@ func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 			"/rates?date=2026-10-01",
 			"/rates/{code}",
 			"/convert?from=USD&to=AZN&amount=100",
+			"/history/{code}?days=30",
 		},
 	})
 }

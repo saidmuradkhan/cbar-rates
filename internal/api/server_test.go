@@ -212,3 +212,59 @@ func TestRatesForBadDate(t *testing.T) {
 		}
 	}
 }
+
+func TestHistory(t *testing.T) {
+	srv, f := newDatedServer(t)
+
+	code, body := get(t, srv, "/history/usd?days=7")
+	if code != http.StatusOK || body["code"] != "USD" {
+		t.Fatalf("got %d %v", code, body)
+	}
+	points := body["points"].([]any)
+	if len(points) != 7 {
+		t.Fatalf("got %d points, want 7", len(points))
+	}
+	first := points[0].(map[string]any)
+	last := points[6].(map[string]any)
+	if first["date"] != "2026-10-02" || last["date"] != "2026-10-08" || last["per_unit"] != 1.7 {
+		t.Errorf("first %v, last %v", first, last)
+	}
+	if len(f.requested) != 7 {
+		t.Errorf("requested %d days, want 7", len(f.requested))
+	}
+
+	_, body = get(t, srv, "/history/USD")
+	if got := len(body["points"].([]any)); got != 30 {
+		t.Errorf("default history has %d points, want 30", got)
+	}
+}
+
+func TestHistorySkipsRepeatedBulletins(t *testing.T) {
+	friday := time.Date(2026, 10, 2, 0, 0, 0, 0, cbar.Baku)
+	f := &stubFetcher{rates: &cbar.Rates{Date: friday, Rates: fixtureRates(t).Rates}}
+	clock := time.Date(2026, 10, 4, 12, 0, 0, 0, cbar.Baku)
+	srv := NewServer(newTestCache(f, &clock))
+
+	_, body := get(t, srv, "/history/USD?days=3")
+	if got := len(body["points"].([]any)); got != 1 {
+		t.Errorf("got %d points, want 1 for a weekend", got)
+	}
+}
+
+func TestHistoryErrors(t *testing.T) {
+	srv, _ := newDatedServer(t)
+
+	for _, url := range []string{"/history/USD?days=0", "/history/USD?days=91", "/history/USD?days=x"} {
+		if code, _ := get(t, srv, url); code != http.StatusBadRequest {
+			t.Errorf("%s: status = %d, want 400", url, code)
+		}
+	}
+	if code, _ := get(t, srv, "/history/XYZ?days=3"); code != http.StatusNotFound {
+		t.Errorf("unknown code status = %d, want 404", code)
+	}
+
+	down := NewServer(NewCache(&stubFetcher{err: errors.New("cbar is down")}, time.Hour))
+	if code, _ := get(t, down, "/history/USD?days=3"); code != http.StatusBadGateway {
+		t.Errorf("CBAR down status = %d, want 502", code)
+	}
+}
