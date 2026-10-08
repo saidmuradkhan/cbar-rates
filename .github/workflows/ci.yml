@@ -17,3 +17,14 @@ jobs:
         run: test -z "$(gofmt -l .)"
       - run: go vet ./...
       - run: go test -race -cover ./...
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t cbar-rates .
+      - name: Smoke test
+        run: |
+          docker run -d --name rates -p 8080:8080 cbar-rates
+          sleep 2
+          curl --fail --silent localhost:8080/health
