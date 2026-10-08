@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,10 +14,14 @@ import (
 type stubFetcher struct {
 	rates *cbar.Rates
 	err   error
+
+	mu    sync.Mutex
 	calls int
 }
 
 func (f *stubFetcher) Fetch(ctx context.Context, date time.Time) (*cbar.Rates, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.calls++
 	if f.err != nil {
 		return nil, f.err
@@ -97,5 +102,20 @@ func TestCacheReturnsErrorWhenEmpty(t *testing.T) {
 
 	if _, err := c.Today(context.Background()); err == nil {
 		t.Error("expected an error")
+	}
+}
+
+func TestCacheKeepsFinishedDaysForGood(t *testing.T) {
+	clock := time.Date(2026, 10, 5, 10, 0, 0, 0, cbar.Baku)
+	f := &stubFetcher{rates: fixtureRates(t)}
+	c := newTestCache(f, &clock)
+	lastWeek := clock.AddDate(0, 0, -7)
+
+	c.Get(context.Background(), lastWeek)
+	clock = clock.Add(48 * time.Hour)
+	c.Get(context.Background(), lastWeek)
+
+	if f.calls != 1 {
+		t.Errorf("fetch calls = %d, want 1", f.calls)
 	}
 }

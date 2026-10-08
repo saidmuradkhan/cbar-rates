@@ -17,7 +17,8 @@ type cacheEntry struct {
 	fetchedAt time.Time
 }
 
-// Cache keeps fetched rates per day so CBAR is hit at most once per TTL.
+// Cache keeps fetched rates per day. Today's rates are refreshed after the TTL,
+// a day that was already over when it was fetched never changes again.
 type Cache struct {
 	fetcher Fetcher
 	ttl     time.Duration
@@ -36,14 +37,18 @@ func NewCache(fetcher Fetcher, ttl time.Duration) *Cache {
 	}
 }
 
+func dayKey(t time.Time) string {
+	return t.In(cbar.Baku).Format("2006-01-02")
+}
+
 func (c *Cache) Get(ctx context.Context, date time.Time) (*cbar.Rates, error) {
-	key := date.In(cbar.Baku).Format("2006-01-02")
+	key := dayKey(date)
 
 	c.mu.Lock()
 	entry, found := c.entries[key]
 	c.mu.Unlock()
 
-	if found && c.now().Sub(entry.fetchedAt) < c.ttl {
+	if found && (dayKey(entry.fetchedAt) > key || c.now().Sub(entry.fetchedAt) < c.ttl) {
 		return entry.rates, nil
 	}
 
